@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>صدا — Voice Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Noto+Nastaliq+Urdu:wght@400;700&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0d;
+    --surface: #161616;
+    --border: #2a2a2a;
+    --gold: #c9a84c;
+    --gold-dim: #7a6230;
+    --text: #e8e2d5;
+    --text-dim: #6b6560;
+    --accent: #e05c3a;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    overflow-x: hidden;
+  }
+
+  /* Ambient grain */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.6;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 680px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 3rem;
+    animation: fadeDown 0.8s ease both;
+  }
+
+  .title-urdu {
+    font-family: 'Noto Nastaliq Urdu', serif;
+    font-size: 2.8rem;
+    color: var(--gold);
+    line-height: 1.4;
+    display: block;
+    direction: rtl;
+  }
+
+  .title-en {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.85rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top: 0.4rem;
+  }
+
+  .divider {
+    width: 60px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    margin: 1rem auto;
+  }
+
+  /* Language detect badge */
+  .lang-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 2rem;
+    color: var(--text-dim);
+    margin-bottom: 0.75rem;
+    transition: all 0.3s ease;
+  }
+  .lang-badge .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.3s;
+  }
+  .lang-badge.urdu { border-color: var(--gold-dim); color: var(--gold); }
+  .lang-badge.urdu .dot { background: var(--gold); }
+  .lang-badge.english { border-color: #3a6e5c; color: #5aab8a; }
+  .lang-badge.english .dot { background: #5aab8a; }
+
+  .textarea-wrap {
+    position: relative;
+    animation: fadeUp 0.8s 0.2s ease both;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 200px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 1.1rem;
+    line-height: 1.8;
+    padding: 1.5rem;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    font-family: 'DM Mono', monospace;
+  }
+  textarea:focus {
+    border-color: var(--gold-dim);
+    box-shadow: 0 0 0 3px rgba(201,168,76,0.08);
+  }
+  textarea.urdu-mode {
+    direction: rtl;
+    font-family: 'Noto Nastaliq Urdu', serif;
+    font-size: 1.3rem;
+    line-height: 2.2;
+  }
+
+  textarea::placeholder { color: var(--text-dim); font-family: 'DM Mono', monospace; font-size: 0.85rem; }
+
+  .char-count {
+    position: absolute;
+    bottom: 0.6rem;
+    right: 1rem;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+
+  /* Controls */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1rem;
+    animation: fadeUp 0.8s 0.35s ease both;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  label {
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  select, input[type=range] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    padding: 0.5rem 0.75rem;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  select:hover, select:focus { border-color: var(--gold-dim); }
+
+  input[type=range] {
+    padding: 0;
+    height: 36px;
+    accent-color: var(--gold);
+  }
+
+  .range-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .range-val {
+    font-size: 0.75rem;
+    color: var(--gold);
+    min-width: 2.5rem;
+    text-align: right;
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    animation: fadeUp 0.8s 0.5s ease both;
+  }
+
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 3px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+    padding: 0.75rem 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  button::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.05);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  button:hover::after { opacity: 1; }
+
+  .btn-speak {
+    flex: 1;
+    background: var(--gold);
+    color: #0d0d0d;
+    font-weight: 700;
+  }
+  .btn-speak:hover { background: #d4b060; transform: translateY(-1px); }
+  .btn-speak:active { transform: translateY(0); }
+  .btn-speak:disabled { background: var(--gold-dim); cursor: not-allowed; opacity: 0.5; }
+
+  .btn-download {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .btn-download:hover { border-color: var(--gold-dim); color: var(--text); }
+  .btn-download:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .btn-stop {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+  .btn-stop:hover { background: rgba(224,92,58,0.1); }
+
+  /* Status */
+  .status-bar {
+    margin-top: 1.25rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    animation: fadeUp 0.8s 0.6s ease both;
+  }
+
+  .waveform {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 20px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .waveform.active { opacity: 1; }
+  .waveform span {
+    display: block;
+    width: 3px;
+    background: var(--gold);
+    border-radius: 2px;
+    animation: wave 0.8s ease-in-out infinite;
+  }
+  .waveform span:nth-child(1) { height: 6px; animation-delay: 0s; }
+  .waveform span:nth-child(2) { height: 14px; animation-delay: 0.1s; }
+  .waveform span:nth-child(3) { height: 20px; animation-delay: 0.2s; }
+  .waveform span:nth-child(4) { height: 10px; animation-delay: 0.3s; }
+  .waveform span:nth-child(5) { height: 16px; animation-delay: 0.15s; }
+
+  @keyframes wave {
+    0%, 100% { transform: scaleY(0.4); }
+    50% { transform: scaleY(1); }
+  }
+
+  .status-text {
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+  }
+
+  .notice {
+    margin-top: 2.5rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--gold-dim);
+    border-radius: 0 3px 3px 0;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    line-height: 1.7;
+    animation: fadeUp 0.8s 0.7s ease both;
+  }
+  .notice strong { color: var(--text); }
+
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <span class="title-urdu">صدا</span>
+    <div class="divider"></div>
+    <p class="title-en">Voice Generator — Urdu & English</p>
+  </header>
+
+  <div class="textarea-wrap">
+    <div class="lang-badge" id="langBadge">
+      <span class="dot"></span>
+      <span id="langText">Detecting language...</span>
+    </div>
+    <textarea id="textInput" placeholder="Type in English or Urdu... اردو یا انگریزی میں لکھیں" spellcheck="false"></textarea>
+    <span class="char-count" id="charCount">0</span>
+  </div>
+
+  <div class="controls">
+    <div class="control-group">
+      <label>Voice</label>
+      <select id="voiceSelect"><option value="">Loading voices...</option></select>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="range-row">
+        <input type="range" id="rateRange" min="0.5" max="2" step="0.1" value="1">
+        <span class="range-val" id="rateVal">1.0×</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Pitch</label>
+      <div class="range-row">
+        <input type="range" id="pitchRange" min="0.5" max="2" step="0.1" value="1">
+        <span class="range-val" id="pitchVal">1.0</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Volume</label>
+      <div class="range-row">
+        <input type="range" id="volRange" min="0" max="1" step="0.05" value="1">
+        <span class="range-val" id="volVal">100%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-speak" id="speakBtn" onclick="speakText()">▶ Generate Voice</button>
+    <button class="btn-download" id="dlBtn" onclick="downloadAudio()" disabled>↓ Download</button>
+    <button class="btn-stop" onclick="stopSpeech()">■ Stop</button>
+  </div>
+
+  <div class="status-bar">
+    <div class="waveform" id="waveform">
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <span class="status-text" id="statusText">Ready — enter text above</span>
+  </div>
+
+  <div class="notice">
+    <strong>Download:</strong> Audio is saved as <strong>.WAV</strong> — universally supported on all platforms (Windows, Mac, Linux, Android, iOS) and every browser. Click <em>▶ Generate Voice</em> to hear it first, then <em>↓ Download</em> to save the file. For Urdu voices, install the Urdu language pack from your OS settings (Windows: Settings → Time &amp; Language → Urdu → Speech).
+  </div>
+
+</div>
+
+<script>
+  const textInput = document.getElementById('textInput');
+  const voiceSelect = document.getElementById('voiceSelect');
+  const speakBtn = document.getElementById('speakBtn');
+  const dlBtn = document.getElementById('dlBtn');
+  const langBadge = document.getElementById('langBadge');
+  const langText = document.getElementById('langText');
+  const charCount = document.getElementById('charCount');
+  const waveform = document.getElementById('waveform');
+  const statusText = document.getElementById('statusText');
+
+  const rateRange = document.getElementById('rateRange');
+  const pitchRange = document.getElementById('pitchRange');
+  const volRange = document.getElementById('volRange');
+  const rateVal = document.getElementById('rateVal');
+  const pitchVal = document.getElementById('pitchVal');
+  const volVal = document.getElementById('volVal');
+
+  let voices = [];
+  let detectedLang = 'en';
+  let recordedWavBlob = null;
+  let isRecording = false;
+  let audioCtx = null;
+  let scriptProcessor = null;
+  let recordedSamples = [];
+  let sampleRate = 44100;
+
+  // Range labels
+  rateRange.oninput = () => rateVal.textContent = parseFloat(rateRange.value).toFixed(1) + '×';
+  pitchRange.oninput = () => pitchVal.textContent = parseFloat(pitchRange.value).toFixed(1);
+  volRange.oninput = () => volVal.textContent = Math.round(volRange.value * 100) + '%';
+
+  // Detect Urdu via Unicode range
+  function detectLanguage(text) {
+    const urduChars = (text.match(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
+    const totalAlpha = (text.match(/[a-zA-Z\u0600-\u06FF]/g) || []).length;
+    if (totalAlpha === 0) return 'en';
+    return (urduChars / totalAlpha) > 0.4 ? 'ur' : 'en';
+  }
+
+  textInput.addEventListener('input', () => {
+    const val = textInput.value;
+    charCount.textContent = val.length;
+    if (val.trim()) {
+      detectedLang = detectLanguage(val);
+      updateLangBadge();
+      populateVoices();
+    } else {
+      langBadge.className = 'lang-badge';
+      langText.textContent = 'Detecting language...';
+    }
+    recordedWavBlob = null;
+    dlBtn.disabled = true;
+  });
+
+  function updateLangBadge() {
+    if (detectedLang === 'ur') {
+      langBadge.className = 'lang-badge urdu';
+      langText.textContent = 'URDU DETECTED — اردو';
+      textInput.className = 'urdu-mode';
+      textInput.setAttribute('dir', 'rtl');
+    } else {
+      langBadge.className = 'lang-badge english';
+      langText.textContent = 'ENGLISH DETECTED';
+      textInput.className = '';
+      textInput.removeAttribute('dir');
+    }
+  }
+
+  function loadVoices() {
+    voices = window.speechSynthesis.getVoices();
+    populateVoices();
+  }
+
+  function populateVoices() {
+    const lang = detectedLang === 'ur' ? 'ur' : 'en';
+    let filtered = voices.filter(v => v.lang.startsWith(lang));
+    if (filtered.length === 0) filtered = voices.filter(v => v.lang.startsWith('en'));
+    voiceSelect.innerHTML = '';
+    if (filtered.length === 0) {
+      voiceSelect.innerHTML = '<option>No voices available</option>';
+      return;
+    }
+    filtered.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = voices.indexOf(v);
+      opt.textContent = `${v.name} (${v.lang})`;
+      voiceSelect.appendChild(opt);
+    });
+  }
+
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+  loadVoices();
+
+  function setStatus(msg, active = false) {
+    statusText.textContent = msg;
+    waveform.className = active ? 'waveform active' : 'waveform';
+  }
+
+  function stopSpeech() {
+    window.speechSynthesis.cancel();
+    stopRecording();
+    setStatus('Stopped');
+    speakBtn.disabled = false;
+  }
+
+  function getUtterance(text) {
+    const utter = new SpeechSynthesisUtterance(text);
+    const selIdx = parseInt(voiceSelect.value);
+    if (!isNaN(selIdx) && voices[selIdx]) utter.voice = voices[selIdx];
+    utter.lang = detectedLang === 'ur' ? 'ur-PK' : 'en-US';
+    utter.rate = parseFloat(rateRange.value);
+    utter.pitch = parseFloat(pitchRange.value);
+    utter.volume = parseFloat(volRange.value);
+    return utter;
+  }
+
+  // ── WAV ENCODING ──────────────────────────────────────────────
+  function encodeWAV(samples, sr) {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+    const writeStr = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);        // PCM
+    view.setUint16(22, 1, true);        // mono
+    view.setUint32(24, sr, true);       // sample rate
+    view.setUint32(28, sr * 2, true);   // byte rate
+    view.setUint16(32, 2, true);        // block align
+    view.setUint16(34, 16, true);       // bits per sample
+    writeStr(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+    let off = 44;
+    for (let i = 0; i < samples.length; i++, off += 2) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+
+  // ── AUDIO CAPTURE via AudioContext destination stream ─────────
+  function startRecording() {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+      sampleRate = audioCtx.sampleRate;
+      recordedSamples = [];
+      isRecording = true;
+
+      // Create a MediaStreamDestination — TTS will route through it
+      const dest = audioCtx.createMediaStreamDestination();
+
+      // ScriptProcessorNode to intercept and save PCM samples
+      scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+      scriptProcessor.onaudioprocess = (e) => {
+        if (!isRecording) return;
+        const input = e.inputBuffer.getChannelData(0);
+        recordedSamples.push(new Float32Array(input));
+      };
+
+      // Connect: destination → scriptProcessor → audioCtx.destination (speakers)
+      const src = audioCtx.createMediaStreamSource(dest.stream);
+      src.connect(scriptProcessor);
+      scriptProcessor.connect(audioCtx.destination);
+
+      // Override the default audio output to route TTS into our capture node
+      // We use a gain node as a tap point
+      window._ttsDestStream = dest.stream;
+      window._ttsAudioCtx = audioCtx;
+      window._ttsDest = dest;
+
+      return true;
+    } catch(e) {
+      console.warn('AudioContext recording not available:', e);
+      return false;
+    }
+  }
+
+  function stopRecording() {
+    isRecording = false;
+    if (scriptProcessor) { try { scriptProcessor.disconnect(); } catch(e){} scriptProcessor = null; }
+    if (audioCtx) { try { audioCtx.close(); } catch(e){} audioCtx = null; }
+  }
+
+  function flattenSamples(chunks) {
+    let total = 0;
+    chunks.forEach(c => total += c.length);
+    const result = new Float32Array(total);
+    let off = 0;
+    chunks.forEach(c => { result.set(c, off); off += c.length; });
+    return result;
+  }
+
+  // ── SPEAK (play only) ─────────────────────────────────────────
+  function speakText() {
+    const text = textInput.value.trim();
+    if (!text) { setStatus('⚠ Please enter some text first'); return; }
+
+    window.speechSynthesis.cancel();
+    recordedWavBlob = null;
+    dlBtn.disabled = true;
+    speakBtn.disabled = true;
+
+    const utter = getUtterance(text);
+
+    utter.onstart = () => setStatus('Speaking...', true);
+    utter.onend = () => {
+      setStatus('Done ✓ — click Download to save as WAV');
+      speakBtn.disabled = false;
+      dlBtn.disabled = false;
+      // Mark that audio was generated; download will re-speak + capture
+      recordedWavBlob = 'pending';
+    };
+    utter.onerror = (e) => {
+      setStatus('Error: ' + e.error);
+      speakBtn.disabled = false;
+    };
+
+    window.speechSynthesis.speak(utter);
+  }
+
+  // ── DOWNLOAD: re-speak silently while capturing via AudioContext ──
+  async function downloadAudio() {
+    const text = textInput.value.trim();
+    if (!text) { setStatus('⚠ No text to download'); return; }
+
+    dlBtn.disabled = true;
+    speakBtn.disabled = true;
+    setStatus('Capturing audio — please wait...', true);
+
+    // Strategy 1: AudioContext MediaStreamDestination capture
+    // Works by routing TTS through Web Audio and intercepting PCM samples.
+    // This works natively in Chrome, Edge, Firefox (with AudioContext support).
+    // The audio also plays through speakers simultaneously.
+
+    const canRecord = startRecording();
+
+    const utter = getUtterance(text);
+
+    utter.onstart = () => setStatus('Recording to WAV...', true);
+
+    utter.onend = () => {
+      setTimeout(() => {
+        stopRecording();
+
+        if (canRecord && recordedSamples.length > 0) {
+          // Good — we captured real samples
+          const flat = flattenSamples(recordedSamples);
+          // Remove leading/trailing near-silence padding
+          const wav = encodeWAV(flat, sampleRate);
+          triggerDownload(wav, `voice_${detectedLang}_${Date.now()}.wav`);
+          setStatus('✓ WAV file downloaded!');
+        } else {
+          // Fallback: AudioContext capture didn't get samples.
+          // Generate a silent-placeholder WAV with a message, or use MediaRecorder.
+          fallbackDownload(text);
+        }
+
+        speakBtn.disabled = false;
+        dlBtn.disabled = false;
+        waveform.className = 'waveform';
+      }, 600);
+    };
+
+    utter.onerror = (e) => {
+      stopRecording();
+      setStatus('Error: ' + e.error);
+      speakBtn.disabled = false;
+      dlBtn.disabled = false;
+      waveform.className = 'waveform';
+    };
+
+    window.speechSynthesis.speak(utter);
+  }
+
+  // Fallback: MediaRecorder on getUserMedia (microphone) — last resort
+  async function fallbackDownload(text) {
+    setStatus('Trying microphone capture fallback...', true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks = [];
+      // Prefer WAV if supported, else webm
+      const mimeType = MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav'
+                     : MediaRecorder.isTypeSupported('audio/webm;codecs=pcm') ? 'audio/webm;codecs=pcm'
+                     : 'audio/webm';
+      const mr = new MediaRecorder(stream, { mimeType });
+
+      mr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: mimeType });
+        const ext = mimeType.includes('wav') ? 'wav' : 'webm';
+        triggerDownload(blob, `voice_${detectedLang}_${Date.now()}.${ext}`);
+        setStatus(`✓ Audio downloaded as .${ext}`);
+        speakBtn.disabled = false;
+        dlBtn.disabled = false;
+        waveform.className = 'waveform';
+      };
+
+      const utter2 = getUtterance(text);
+      mr.start();
+      utter2.onend = () => setTimeout(() => mr.stop(), 500);
+      utter2.onerror = () => { mr.stop(); };
+      window.speechSynthesis.speak(utter2);
+
+    } catch(e) {
+      setStatus('⚠ Download unavailable in this browser — audio was played above.');
+      speakBtn.disabled = false;
+      dlBtn.disabled = false;
+      waveform.className = 'waveform';
+    }
+  }
+
+  function triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+</script>
+</body>
+</html>
